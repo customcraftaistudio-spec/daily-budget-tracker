@@ -1,0 +1,1124 @@
+```html
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Budget Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-slate-200 text-slate-800 antialiased">
+    <div x-data="budgetTracker" class="max-w-md mx-auto min-h-screen bg-slate-50 relative shadow-2xl flex flex-col">
+        
+        <!-- Header -->
+        <header class="bg-indigo-600 text-white pt-6 pb-5 px-5 shadow-md relative z-10 rounded-b-2xl mb-2">
+            <h1 class="text-xl font-bold text-center tracking-tight"><i class="fas fa-wallet mr-2 text-indigo-200"></i>Daily Budget Tracker</h1>
+            <p class="text-indigo-200 text-xs text-center mt-1" x-text="getCurrentDateFormatted()"></p>
+        </header>
+
+        <main class="flex-1 overflow-y-auto p-4 pb-20 relative z-0">
+            
+            <!-- Toast Notification -->
+            <div x-show="toast.show" 
+                 x-transition.opacity.duration.300ms
+                 class="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center gap-2 w-max max-w-[90%]"
+                 :class="toast.type === 'error' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'"
+                 style="display: none;">
+                <i class="fas" :class="toast.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'"></i>
+                <span x-text="toast.message"></span>
+            </div>
+
+            <!-- MENU 0: Home -->
+            <div x-show="currentMenu === 'home'" class="fade-in space-y-4 pb-4">
+                
+                <!-- Dashboard Section -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
+                        <h2 class="text-sm font-bold text-slate-800"><i class="fas fa-chart-line mr-1 text-indigo-500"></i> Dashboard</h2>
+                    </div>
+                    
+                    <!-- Date Filter -->
+                    <div class="flex gap-2 mb-4">
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-medium text-slate-500 mb-1">Dari Tanggal</label>
+                            <input type="date" x-model="dashStartDate" @change="updateDashboard" class="w-full text-xs rounded-lg border-slate-300 border p-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-slate-50">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-[10px] font-medium text-slate-500 mb-1">Sampai Tanggal</label>
+                            <input type="date" x-model="dashEndDate" @change="updateDashboard" class="w-full text-xs rounded-lg border-slate-300 border p-2 focus:ring-2 focus:ring-indigo-500 outline-none bg-slate-50">
+                        </div>
+                    </div>
+
+                    <!-- Chart Container -->
+                    <div class="relative h-48 w-full mb-4">
+                        <canvas id="budgetChart"></canvas>
+                    </div>
+
+                    <!-- Summary Stats -->
+                    <div class="grid grid-cols-3 gap-2 text-center border-t border-slate-100 pt-3">
+                        <div class="bg-indigo-50 rounded p-2">
+                            <p class="text-[10px] text-indigo-600 font-semibold mb-1">Total Budget</p>
+                            <p class="text-xs font-bold text-slate-800" x-text="formatRupiah(dashData.budget)"></p>
+                        </div>
+                        <div class="bg-rose-50 rounded p-2">
+                            <p class="text-[10px] text-rose-600 font-semibold mb-1">Pengeluaran</p>
+                            <p class="text-xs font-bold text-slate-800" x-text="formatRupiah(dashData.expense)"></p>
+                        </div>
+                        <div class="bg-emerald-50 rounded p-2">
+                            <p class="text-[10px] text-emerald-600 font-semibold mb-1">Sisa Budget</p>
+                            <p class="text-xs font-bold text-slate-800" :class="dashData.sisa < 0 ? 'text-rose-600' : ''" x-text="formatRupiah(dashData.sisa)"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <button @click="navigateTo('inputBudget')" class="w-full group relative overflow-hidden bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center gap-4 text-left">
+                        <div class="bg-blue-100 text-blue-600 w-10 h-10 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-semibold text-sm text-slate-800">1. Input Budget</h2>
+                            <p class="text-[11px] text-slate-500">Tambah/kurang alokasi dana</p>
+                        </div>
+                    </button>
+
+                    <button @click="navigateTo('inputPengeluaran')" class="w-full group relative overflow-hidden bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center gap-4 text-left">
+                        <div class="bg-rose-100 text-rose-600 w-10 h-10 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-semibold text-sm text-slate-800">2. Input Pengeluaran</h2>
+                            <p class="text-[11px] text-slate-500">Catat pengeluaran harian</p>
+                        </div>
+                    </button>
+
+                    <button @click="navigateTo('report')" class="w-full group relative overflow-hidden bg-white border border-slate-200 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex items-center gap-4 text-left">
+                        <div class="bg-emerald-100 text-emerald-600 w-10 h-10 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                            <i class="fas fa-chart-pie"></i>
+                        </div>
+                        <div>
+                            <h2 class="font-semibold text-sm text-slate-800">3. Report</h2>
+                            <p class="text-[11px] text-slate-500">Lihat ringkasan & rincian</p>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- MENU 1: Input Budget -->
+            <div x-show="currentMenu === 'inputBudget'" class="fade-in space-y-5" style="display: none;">
+                <h2 class="text-xl font-bold text-slate-800 border-b pb-2 mb-4">Input Budget Bulanan</h2>
+                
+                <form @submit.prevent="submitBudget" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Tahun</label>
+                            <select x-model="budgetForm.tahun" class="w-full rounded-lg border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                                <template x-for="year in yearsList" :key="year">
+                                    <option :value="year" x-text="year"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Bulan</label>
+                            <select x-model="budgetForm.bulan" class="w-full rounded-lg border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                                <template x-for="(month, index) in monthsList" :key="index">
+                                    <option :value="index + 1" x-text="month"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Tgl Input</label>
+                            <select x-model="budgetForm.tanggal" class="w-full rounded-lg border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                                <template x-for="day in 31" :key="day">
+                                    <option :value="day" x-text="day"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Tujuan</label>
+                            <select x-model="budgetForm.tipe" class="w-full rounded-lg border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white font-medium" :class="budgetForm.tipe === 'add' ? 'text-emerald-600' : 'text-rose-600'">
+                                <option value="add" class="text-emerald-600">Tambahkan (+)</option>
+                                <option value="reduce" class="text-rose-600">Kurangi (-)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Nominal -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Nominal (Rp)</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <span class="text-slate-500 font-medium">Rp</span>
+                            </div>
+                            <input type="text" 
+                                   x-model="budgetForm.nominalDisplay" 
+                                   @input="formatBudgetInput"
+                                   placeholder="0" 
+                                   class="w-full rounded-lg border-slate-300 border py-2.5 pl-10 pr-3 text-lg font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" required>
+                        </div>
+                    </div>
+
+                    <!-- Keterangan -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Keterangan Sumber Dana</label>
+                        <input type="text" 
+                               x-model="budgetForm.keterangan" 
+                               placeholder="Contoh: Gaji bulanan, Bonus, dll" 
+                               class="w-full rounded-lg border-slate-300 border py-2.5 px-3 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none" required>
+                    </div>
+
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-4 rounded-lg shadow-sm transition-colors mt-2">
+                        Submit Budget
+                    </button>
+                </form>
+
+                <!-- History Budget Current Month -->
+                <div class="mt-6 pt-4 border-t">
+                    <h3 class="text-sm font-semibold text-slate-600 mb-2">Riwayat Budget (Bulan Ini)</h3>
+                    <div class="space-y-2 max-h-32 overflow-y-auto pr-1">
+                        <template x-if="getBudgetHistoryCurrentMonth().length === 0">
+                            <p class="text-xs text-slate-400 italic">Belum ada input bulan ini.</p>
+                        </template>
+                        <template x-for="(item, index) in getBudgetHistoryCurrentMonth()" :key="index">
+                            <div class="flex justify-between items-center bg-white p-2 border rounded text-sm">
+                                <div>
+                                    <div class="font-medium text-slate-700" x-text="item.keterangan || 'Tanpa Keterangan'"></div>
+                                    <span class="text-xs text-slate-500" x-text="`${item.tanggal}/${item.bulan}/${item.tahun}`"></span>
+                                </div>
+                                <div class="font-semibold" :class="item.tipe === 'add' ? 'text-emerald-600' : 'text-rose-600'" 
+                                     x-text="(item.tipe === 'add' ? '+' : '-') + formatRupiah(item.nominal)">
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MENU 2: Input Pengeluaran -->
+            <div x-show="currentMenu === 'inputPengeluaran'" class="fade-in space-y-4" style="display: none;">
+                
+                <!-- Tanggal Selector -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="text-sm font-bold text-slate-800">Pilih Tanggal Pengeluaran</h2>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="date" x-model="expenseDateStr" class="flex-1 rounded-lg border-slate-300 border p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <button @click="loadExpenseForDate" class="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg font-medium hover:bg-indigo-200 transition-colors">
+                            OK
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expense Form -->
+                <div x-show="activeExpenseDate !== null" x-transition class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-100 px-4 py-3 border-b flex justify-between items-center">
+                        <h3 class="font-semibold text-slate-700 text-sm">
+                            <i class="fas fa-list-check mr-2 text-indigo-500"></i>
+                            Input untuk: <span x-text="formatDateStr(activeExpenseDate)"></span>
+                        </h3>
+                        <!-- Warning if date is past -->
+                        <span x-show="isDatePast(activeExpenseDate)" class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded font-medium">History</span>
+                    </div>
+
+                    <!-- Checklist Form -->
+                    <div class="p-4 space-y-4">
+                        <div class="space-y-3">
+                            <template x-for="(cat, index) in expenseCategories" :key="cat.id">
+                                <div class="flex flex-col gap-2 p-3 rounded-lg border transition-colors" :class="expenseForm[cat.id].checked ? 'border-indigo-300 bg-indigo-50/30' : 'border-slate-100 bg-slate-50'">
+                                    
+                                    <div class="flex items-center justify-between">
+                                        <label class="flex items-center gap-3 cursor-pointer select-none">
+                                            <input type="checkbox" x-model="expenseForm[cat.id].checked" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer">
+                                            <span class="font-medium text-sm text-slate-700" x-text="cat.name"></span>
+                                        </label>
+                                        
+                                        <!-- Show total saved amount for this category on this date -->
+                                        <div x-show="!expenseForm[cat.id].checked && getSavedExpense(activeExpenseDate, cat.id) > 0" class="text-xs font-semibold text-rose-500">
+                                            - <span x-text="formatRupiah(getSavedExpense(activeExpenseDate, cat.id))"></span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Input area when checked (Description + Nominal) -->
+                                    <div x-show="expenseForm[cat.id].checked" x-collapse class="pl-7 pr-1 pt-1 pb-1">
+                                        <div class="flex flex-col gap-2">
+                                            
+                                            <!-- Keterangan for ALL categories -->
+                                            <input type="text" x-model="expenseForm[cat.id].desc" placeholder="Keterangan pengeluaran..." class="w-full text-xs rounded border-slate-300 border py-2 px-2.5 focus:border-indigo-500 outline-none bg-white">
+                                            
+                                            <div class="flex gap-2">
+                                                <div class="relative flex-1">
+                                                    <div class="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                                                        <span class="text-slate-500 text-xs">Rp</span>
+                                                    </div>
+                                                    <input type="text" 
+                                                           x-model="expenseForm[cat.id].nominalDisplay" 
+                                                           @input="formatExpenseInput(cat.id)"
+                                                           placeholder="0" 
+                                                           class="w-full rounded border-slate-300 border py-1.5 pl-8 pr-2 text-sm font-medium focus:border-indigo-500 outline-none bg-white">
+                                                </div>
+                                                <button @click="submitExpenseItem(cat.id)" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 rounded font-medium transition-colors whitespace-nowrap">
+                                                    <i class="fas fa-check mr-1"></i> Submit
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    
+                    <!-- Daily Summary -->
+                    <div class="bg-rose-50 p-4 border-t border-rose-100 flex justify-between items-center">
+                        <span class="text-sm font-medium text-rose-800">Total Pengeluaran Tgl Ini:</span>
+                        <span class="text-lg font-bold text-rose-600" x-text="formatRupiah(calculateDailyExpense(activeExpenseDate))"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MENU 3: Report -->
+            <div x-show="currentMenu === 'report'" class="fade-in space-y-4" style="display: none;">
+                <h2 class="text-xl font-bold text-slate-800 border-b pb-2 mb-4">Laporan Keuangan</h2>
+
+                <form @submit.prevent="generateReport" class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Jenis Laporan</label>
+                        <select x-model="reportParams.jenis" class="w-full rounded-lg border-slate-300 border p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                            <option value="sum">Sum Report (Budget - Pengeluaran)</option>
+                            <option value="budget">Total Budget (Masuk)</option>
+                            <option value="expense">Total Pengeluaran (Keluar)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Dari Tanggal</label>
+                            <input type="date" x-model="reportParams.startDate" class="w-full rounded-lg border-slate-300 border p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Sampai Tanggal</label>
+                            <input type="date" x-model="reportParams.endDate" class="w-full rounded-lg border-slate-300 border p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-4 rounded-lg shadow-sm transition-colors mt-2">
+                        Tampilkan Report
+                    </button>
+                </form>
+
+                <!-- Report Results -->
+                <div x-show="reportResult !== null" x-transition class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-4">
+                    <div class="bg-slate-100 px-4 py-3 border-b">
+                        <h3 class="font-semibold text-slate-700 text-sm">Hasil Laporan</h3>
+                        <p class="text-xs text-slate-500" x-text="`${formatDateStr(reportParams.startDate)} s/d ${formatDateStr(reportParams.endDate)}`"></p>
+                    </div>
+                    
+                    <!-- Total Sum Output -->
+                    <div class="p-5 text-center bg-white">
+                        <h4 class="text-sm font-medium text-slate-500 uppercase tracking-wider mb-2" x-text="getReportTitle()"></h4>
+                        <div class="text-3xl font-bold" 
+                             :class="{
+                                 'text-emerald-600': reportParams.jenis === 'budget' || (reportParams.jenis === 'sum' && reportResult >= 0),
+                                 'text-rose-600': reportParams.jenis === 'expense' || (reportParams.jenis === 'sum' && reportResult < 0)
+                             }"
+                             x-text="(reportParams.jenis === 'expense' ? '- ' : '') + formatRupiah(Math.abs(reportResult))">
+                        </div>
+                    </div>
+
+                    <!-- Report Breakdowns based on Selection -->
+                    
+                    <!-- 1. Detailed Breakdown: Budget -->
+                    <div x-show="(reportParams.jenis === 'budget' || reportParams.jenis === 'sum') && reportDetails.budgetList.length > 0" class="border-t bg-slate-50">
+                        <div class="px-4 py-3 bg-emerald-50/50 border-b border-emerald-100">
+                            <h4 class="text-xs font-bold text-emerald-800 uppercase">Rincian Budget Masuk/Keluar</h4>
+                        </div>
+                        <div class="max-h-60 overflow-y-auto p-4 space-y-2">
+                            <template x-for="item in reportDetails.budgetList" :key="item.id">
+                                <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-200 text-sm transition-all hover:border-slate-300">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1 pr-2">
+                                            <div class="font-semibold text-slate-800" x-text="item.keterangan || 'Tanpa Keterangan'"></div>
+                                            <div class="text-xs text-slate-500 mt-0.5" x-text="`${item.tanggal}/${item.bulan}/${item.tahun}`"></div>
+                                        </div>
+                                        <div class="font-bold text-right whitespace-nowrap" :class="item.tipe === 'add' ? 'text-emerald-600' : 'text-rose-600'" x-text="(item.tipe === 'add' ? '+' : '-') + formatRupiah(item.nominal)"></div>
+                                    </div>
+                                    <div class="flex justify-end gap-2 mt-3 pt-2 border-t border-slate-100">
+                                        <button @click="openEditBudget(item)" class="text-[11px] font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-1.5 rounded transition-colors flex items-center gap-1"><i class="fas fa-edit"></i> Edit</button>
+                                        <button @click="confirmDeleteBudget(item.id)" class="text-[11px] font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1.5 rounded transition-colors flex items-center gap-1"><i class="fas fa-trash-alt"></i> Hapus</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- 2. Detailed Breakdown: Pengeluaran -->
+                    <div x-show="(reportParams.jenis === 'expense' || reportParams.jenis === 'sum') && reportDetails.expenseList.length > 0" class="border-t bg-slate-50">
+                        <div class="px-4 py-3 bg-rose-50/50 border-b border-rose-100">
+                            <h4 class="text-xs font-bold text-rose-800 uppercase">Rincian Pengeluaran</h4>
+                        </div>
+                        <div class="max-h-60 overflow-y-auto p-4 space-y-2">
+                            <template x-for="item in reportDetails.expenseList" :key="item.id">
+                                <div class="bg-white p-3 rounded-lg shadow-sm border border-slate-200 text-sm transition-all hover:border-slate-300">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1 pr-2">
+                                            <div class="font-semibold text-slate-800 capitalize">
+                                                <span x-text="getCategoryName(item.category)"></span>
+                                            </div>
+                                            <div class="text-xs text-slate-600 mt-0.5 italic" x-text="item.desc ? `Ket: ${item.desc}` : 'Tanpa Keterangan'"></div>
+                                            <div class="text-xs text-slate-400 mt-1" x-text="formatDateStr(item.date)"></div>
+                                        </div>
+                                        <div class="font-bold text-right text-rose-600 whitespace-nowrap" x-text="'-' + formatRupiah(item.nominal)"></div>
+                                    </div>
+                                    <div class="flex justify-end gap-2 mt-3 pt-2 border-t border-slate-100">
+                                        <button @click="openEditExpense(item)" class="text-[11px] font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-1.5 rounded transition-colors flex items-center gap-1"><i class="fas fa-edit"></i> Edit</button>
+                                        <button @click="confirmDeleteExpense(item.id)" class="text-[11px] font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 px-2 py-1.5 rounded transition-colors flex items-center gap-1"><i class="fas fa-trash-alt"></i> Hapus</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Empty State for Details -->
+                    <div x-show="reportParams.jenis === 'budget' && reportDetails.budgetList.length === 0" class="p-4 text-center text-sm text-slate-500 border-t">Tidak ada data budget pada periode ini.</div>
+                    <div x-show="reportParams.jenis === 'expense' && reportDetails.expenseList.length === 0" class="p-4 text-center text-sm text-slate-500 border-t">Tidak ada data pengeluaran pada periode ini.</div>
+                    <div x-show="reportParams.jenis === 'sum' && reportDetails.budgetList.length === 0 && reportDetails.expenseList.length === 0" class="p-4 text-center text-sm text-slate-500 border-t">Tidak ada data keuangan pada periode ini.</div>
+                </div>
+
+            </div>
+            
+            <div class="h-10"></div>
+        </main>
+
+        <!-- Fixed Bottom Navigation Container -->
+        <div x-show="currentMenu !== 'home'" class="absolute bottom-0 w-full bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
+            <!-- Reset Button -->
+            <div class="bg-rose-50/50 px-4 py-2 border-b border-rose-100 flex justify-end">
+                <button @click="confirmReset" class="text-xs font-medium text-rose-600 hover:text-rose-800 flex items-center gap-1 bg-white px-2 py-1 rounded shadow-sm border border-rose-200">
+                    <i class="fas fa-trash-alt"></i> Reset Data Halaman Ini
+                </button>
+            </div>
+            
+            <div class="flex p-2 gap-2 bg-slate-50">
+                <button @click="goBack" class="flex-1 bg-white border border-slate-300 text-slate-700 py-2.5 rounded-lg text-sm font-medium hover:bg-slate-100 transition-colors flex items-center justify-center gap-2">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+                <button @click="navigateTo('home')" class="flex-1 bg-indigo-50 border border-indigo-200 text-indigo-700 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors flex items-center justify-center gap-2">
+                    <i class="fas fa-home"></i> Back to Home
+                </button>
+            </div>
+        </div>
+
+        <!-- Edit Budget Modal -->
+        <div x-show="editBudgetForm.show" 
+             style="display: none;"
+             class="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden" @click.away="editBudgetForm.show = false">
+                <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-bold text-slate-800"><i class="fas fa-edit text-indigo-500 mr-1"></i> Edit Budget</h3>
+                    <button @click="editBudgetForm.show = false" class="text-slate-400 hover:text-rose-500"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-5 space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Tgl Input</label>
+                            <select x-model="editBudgetForm.tanggal" class="w-full rounded border-slate-300 border p-2 text-sm outline-none bg-white">
+                                <template x-for="day in 31" :key="day"><option :value="day" x-text="day"></option></template>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Tujuan</label>
+                            <select x-model="editBudgetForm.tipe" class="w-full rounded border-slate-300 border p-2 text-sm outline-none bg-white font-medium" :class="editBudgetForm.tipe === 'add' ? 'text-emerald-600' : 'text-rose-600'">
+                                <option value="add" class="text-emerald-600">Tambah (+)</option>
+                                <option value="reduce" class="text-rose-600">Kurangi (-)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Nominal (Rp)</label>
+                        <input type="text" x-model="editBudgetForm.nominalDisplay" @input="formatEditBudgetInput" class="w-full rounded border-slate-300 border p-2 text-sm font-bold outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Keterangan</label>
+                        <input type="text" x-model="editBudgetForm.keterangan" class="w-full rounded border-slate-300 border p-2 text-sm outline-none" required>
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button @click="editBudgetForm.show = false" class="flex-1 py-2 rounded-lg font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors text-sm">Batal</button>
+                        <button @click="saveEditBudget" class="flex-1 py-2 rounded-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm shadow-sm"><i class="fas fa-save mr-1"></i> Simpan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Expense Modal -->
+        <div x-show="editExpenseForm.show" 
+             style="display: none;"
+             class="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden" @click.away="editExpenseForm.show = false">
+                <div class="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-bold text-slate-800"><i class="fas fa-edit text-indigo-500 mr-1"></i> Edit Pengeluaran</h3>
+                    <button @click="editExpenseForm.show = false" class="text-slate-400 hover:text-rose-500"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-5 space-y-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Tanggal</label>
+                            <input type="date" x-model="editExpenseForm.date" class="w-full rounded border-slate-300 border p-2 text-sm outline-none bg-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Kategori</label>
+                            <select x-model="editExpenseForm.category" class="w-full rounded border-slate-300 border p-2 text-sm outline-none bg-white">
+                                <template x-for="cat in expenseCategories" :key="cat.id"><option :value="cat.id" x-text="cat.name"></option></template>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Keterangan</label>
+                        <input type="text" x-model="editExpenseForm.desc" class="w-full rounded border-slate-300 border p-2 text-sm outline-none" required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1">Nominal (Rp)</label>
+                        <input type="text" x-model="editExpenseForm.nominalDisplay" @input="formatEditExpenseInput" class="w-full rounded border-slate-300 border p-2 text-sm font-bold outline-none text-rose-600" required>
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button @click="editExpenseForm.show = false" class="flex-1 py-2 rounded-lg font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors text-sm">Batal</button>
+                        <button @click="saveEditExpense" class="flex-1 py-2 rounded-lg font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors text-sm shadow-sm"><i class="fas fa-save mr-1"></i> Simpan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Confirmation Modal -->
+        <div x-show="confirmModal.show" 
+             style="display: none;"
+             class="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden" @click.away="confirmModal.show = false">
+                <div class="p-5 text-center">
+                    <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-exclamation-triangle text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-800 mb-2">Konfirmasi Reset</h3>
+                    <p class="text-sm text-slate-600 mb-6" x-text="confirmModal.message"></p>
+                    
+                    <div class="flex gap-3">
+                        <button @click="confirmModal.show = false" class="flex-1 py-2 rounded-lg font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors">
+                            Batal
+                        </button>
+                        <button @click="executeReset" class="flex-1 py-2 rounded-lg font-medium text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-sm">
+                            Ya, Hapus
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 1. Pindahkan Chart ke luar Alpine untuk menghindari Error Proxy (Silent Crash)
+        let dashboardChart = null; 
+
+        document.addEventListener('alpine:init', () => {
+            // Helper untuk mengamankan Zona Waktu Lokal (WIB) agar tidak mundur ke hari kemarin
+            const getLocalToday = () => {
+                const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            };
+            const getLocalFirstDay = () => {
+                const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+            };
+            const getLocalLastDay = () => {
+                const d = new Date(); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+                return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+            };
+
+            Alpine.data('budgetTracker', () => ({
+                currentMenu: 'home',
+                navigationHistory: ['home'],
+                
+                budgets: [], 
+                expenses: [], 
+                
+                yearsList: Array.from({length: 25}, (_, i) => 2026 + i),
+                monthsList: ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'],
+                
+                expenseCategories: [
+                    { id: 'makan', name: '1. Makan' },
+                    { id: 'rokok', name: '2. Rokok' },
+                    { id: 'bensin', name: '3. Bensin' },
+                    { id: 'lainnya', name: '4. Lainnya' }
+                ],
+
+                budgetForm: {
+                    tahun: new Date().getFullYear(),
+                    bulan: new Date().getMonth() + 1,
+                    tanggal: new Date().getDate(),
+                    tipe: 'add',
+                    nominalDisplay: '',
+                    nominal: 0,
+                    keterangan: '' 
+                },
+
+                expenseDateStr: getLocalToday(),
+                activeExpenseDate: null,
+                
+                expenseForm: {
+                    makan: { checked: false, nominalDisplay: '', nominal: 0, desc: '' },
+                    rokok: { checked: false, nominalDisplay: '', nominal: 0, desc: '' },
+                    bensin: { checked: false, nominalDisplay: '', nominal: 0, desc: '' },
+                    lainnya: { checked: false, nominalDisplay: '', nominal: 0, desc: '' }
+                },
+
+                reportParams: {
+                    jenis: 'sum',
+                    startDate: getLocalFirstDay(),
+                    endDate: getLocalToday()
+                },
+                reportResult: null,
+                reportDetails: { totalBudget: 0, totalExpense: 0, budgetList: [], expenseList: [] },
+
+                // Dashboard variables (Chart variable removed from here)
+                dashStartDate: getLocalFirstDay(),
+                dashEndDate: getLocalLastDay(),
+                dashData: { budget: 0, expense: 0, sisa: 0 },
+
+                toast: { show: false, message: '', type: 'success', timeout: null },
+                confirmModal: { show: false, message: '', actionType: '', targetId: null },
+
+                editBudgetForm: { id: null, tahun: '', bulan: '', tanggal: '', tipe: '', nominalDisplay: '', nominal: 0, keterangan: '', show: false },
+                editExpenseForm: { id: null, date: '', category: '', desc: '', nominalDisplay: '', nominal: 0, show: false },
+
+                init() {
+                    this.loadData();
+                    const today = new Date();
+                    this.budgetForm.tahun = today.getFullYear();
+                    this.budgetForm.bulan = today.getMonth() + 1;
+                    this.budgetForm.tanggal = today.getDate();
+
+                    this.$nextTick(() => {
+                        this.updateDashboard();
+                    });
+                },
+
+                navigateTo(menu) {
+                    if (this.currentMenu !== menu) {
+                        this.navigationHistory.push(menu);
+                        this.currentMenu = menu;
+                        this.onMenuEnter(menu);
+                    }
+                },
+                
+                goBack() {
+                    if (this.navigationHistory.length > 1) {
+                        this.navigationHistory.pop();
+                        this.currentMenu = this.navigationHistory[this.navigationHistory.length - 1];
+                        this.onMenuEnter(this.currentMenu);
+                    }
+                },
+
+                onMenuEnter(menu) {
+                    if (menu === 'home') {
+                        this.$nextTick(() => {
+                            this.updateDashboard();
+                        });
+                    }
+                    if (menu === 'inputPengeluaran') {
+                        this.activeExpenseDate = null;
+                        this.expenseDateStr = getLocalToday();
+                    }
+                    if (menu === 'report') {
+                        this.reportResult = null;
+                    }
+                },
+
+                loadData() {
+                    const savedBudgets = localStorage.getItem('budget_tracker_budgets');
+                    const savedExpenses = localStorage.getItem('budget_tracker_expenses');
+                    if (savedBudgets) this.budgets = JSON.parse(savedBudgets);
+                    if (savedExpenses) this.expenses = JSON.parse(savedExpenses);
+                },
+
+                saveData() {
+                    localStorage.setItem('budget_tracker_budgets', JSON.stringify(this.budgets));
+                    localStorage.setItem('budget_tracker_expenses', JSON.stringify(this.expenses));
+                },
+
+                formatRupiah(number) {
+                    if (isNaN(number)) return "0";
+                    return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(number);
+                },
+
+                parseRupiahToNumber(rupiahString) {
+                    return parseInt(rupiahString.replace(/[^,\d]/g, '').toString() || '0', 10);
+                },
+
+                formatNumberInput(value) {
+                    let numberStr = value.replace(/[^,\d]/g, '');
+                    let number = parseInt(numberStr, 10);
+                    if (isNaN(number)) return '';
+                    return this.formatRupiah(number);
+                },
+                
+                getCurrentDateFormatted() {
+                    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                    return new Date().toLocaleDateString('id-ID', options);
+                },
+
+                formatDateStr(dateStr) {
+                    if(!dateStr) return '';
+                    const options = { year: 'numeric', month: 'short', day: 'numeric' };
+                    return new Date(dateStr).toLocaleDateString('id-ID', options);
+                },
+                
+                getCategoryName(id) {
+                    const cat = this.expenseCategories.find(c => c.id === id);
+                    return cat ? cat.name.substring(3) : id;
+                },
+
+                showToast(message, type = 'success') {
+                    this.toast.message = message;
+                    this.toast.type = type;
+                    this.toast.show = true;
+                    if (this.toast.timeout) clearTimeout(this.toast.timeout);
+                    this.toast.timeout = setTimeout(() => { this.toast.show = false; }, 3000);
+                },
+
+                // --- Dashboard Logic ---
+                updateDashboard() {
+                    const start = new Date(this.dashStartDate);
+                    start.setHours(0,0,0,0);
+                    const end = new Date(this.dashEndDate);
+                    end.setHours(23,59,59,999);
+
+                    let periodBudgets = this.budgets.filter(b => {
+                        const bDate = new Date(b.tahun, b.bulan - 1, b.tanggal);
+                        return bDate >= start && bDate <= end;
+                    });
+                    let totalBudget = periodBudgets.reduce((sum, b) => b.tipe === 'add' ? sum + b.nominal : sum - b.nominal, 0);
+
+                    let totalExpense = this.expenses.filter(e => {
+                        const eDate = new Date(e.date);
+                        return eDate >= start && eDate <= end;
+                    }).reduce((sum, e) => sum + e.nominal, 0);
+
+                    let sisa = totalBudget - totalExpense;
+                    
+                    this.dashData = {
+                        budget: totalBudget,
+                        expense: totalExpense,
+                        sisa: sisa
+                    };
+
+                    this.renderChart(totalBudget, totalExpense, sisa);
+                },
+
+                renderChart(budget, expense, sisa) {
+                    const ctx = document.getElementById('budgetChart');
+                    if (!ctx) return;
+
+                    let chartSisa = sisa > 0 ? sisa : 0; 
+                    let data = [expense, chartSisa];
+                    let bgColors = ['#f43f5e', '#10b981']; 
+
+                    if (budget === 0 && expense === 0) {
+                        data = [1];
+                        bgColors = ['#e2e8f0']; 
+                    }
+
+                    if (dashboardChart) {
+                        dashboardChart.data.datasets[0].data = data;
+                        dashboardChart.data.datasets[0].backgroundColor = bgColors;
+                        dashboardChart.data.labels = (budget === 0 && expense === 0) ? ['Tidak Ada Data'] : ['Pengeluaran', 'Sisa Budget'];
+                        dashboardChart.update();
+                    } else {
+                        dashboardChart = new Chart(ctx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: (budget === 0 && expense === 0) ? ['Tidak Ada Data'] : ['Pengeluaran', 'Sisa Budget'],
+                                datasets: [{
+                                    data: data,
+                                    backgroundColor: bgColors,
+                                    borderWidth: 0,
+                                    hoverOffset: 4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '65%',
+                                plugins: {
+                                    legend: { 
+                                        position: 'bottom',
+                                        labels: { boxWidth: 12, font: { size: 11, family: 'Inter' } }
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (context) => {
+                                                if (budget === 0 && expense === 0) return 'Data Kosong';
+                                                let label = context.label || '';
+                                                if (label) { label += ': '; }
+                                                label += this.formatRupiah(context.raw);
+                                                return label;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                },
+
+                // --- Menu 1 Logic ---
+                formatBudgetInput() {
+                    this.budgetForm.nominalDisplay = this.formatNumberInput(this.budgetForm.nominalDisplay);
+                    this.budgetForm.nominal = this.parseRupiahToNumber(this.budgetForm.nominalDisplay);
+                },
+
+                submitBudget() {
+                    if (this.budgetForm.nominal <= 0) {
+                        this.showToast('Nominal harus lebih dari 0', 'error');
+                        return;
+                    }
+                    if (!this.budgetForm.keterangan.trim()) {
+                        this.showToast('Keterangan sumber dana harus diisi', 'error');
+                        return;
+                    }
+
+                    const newBudget = {
+                        id: Date.now().toString(),
+                        tahun: parseInt(this.budgetForm.tahun),
+                        bulan: parseInt(this.budgetForm.bulan),
+                        tanggal: parseInt(this.budgetForm.tanggal),
+                        tipe: this.budgetForm.tipe,
+                        nominal: this.budgetForm.nominal,
+                        keterangan: this.budgetForm.keterangan.trim(),
+                        timestamp: new Date().getTime()
+                    };
+
+                    this.budgets = [...this.budgets, newBudget];
+                    this.saveData();
+                    
+                    this.budgetForm.nominalDisplay = '';
+                    this.budgetForm.nominal = 0;
+                    this.budgetForm.keterangan = '';
+                    
+                    this.updateDashboard();
+
+                    this.showToast(`Budget berhasil di${this.budgetForm.tipe === 'add' ? 'tambahkan' : 'kurangi'}`);
+                },
+
+                getBudgetHistoryCurrentMonth() {
+                    const today = new Date();
+                    const currentMonth = today.getMonth() + 1;
+                    const currentYear = today.getFullYear();
+                    
+                    return this.budgets
+                        .filter(b => b.bulan === currentMonth && b.tahun === currentYear)
+                        .sort((a, b) => b.timestamp - a.timestamp);
+                },
+
+                // --- Menu 2 Logic ---
+                loadExpenseForDate() {
+                    if (!this.expenseDateStr) {
+                        this.showToast('Pilih tanggal terlebih dahulu', 'error');
+                        return;
+                    }
+                    this.activeExpenseDate = this.expenseDateStr;
+                    this.resetExpenseForm();
+                },
+
+                isDatePast(dateStr) {
+                    if (!dateStr) return false;
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    const checkDate = new Date(dateStr);
+                    checkDate.setHours(0,0,0,0);
+                    return checkDate < today;
+                },
+
+                formatExpenseInput(catId) {
+                    this.expenseForm[catId].nominalDisplay = this.formatNumberInput(this.expenseForm[catId].nominalDisplay);
+                    this.expenseForm[catId].nominal = this.parseRupiahToNumber(this.expenseForm[catId].nominalDisplay);
+                },
+
+                submitExpenseItem(catId) {
+                    const item = this.expenseForm[catId];
+                    if (item.nominal <= 0) {
+                        this.showToast('Nominal harus diisi', 'error');
+                        return;
+                    }
+                    if (!item.desc.trim()) {
+                        this.showToast('Keterangan pengeluaran harus diisi', 'error');
+                        return;
+                    }
+
+                    const newExpense = {
+                        id: Date.now().toString(),
+                        date: this.activeExpenseDate,
+                        category: catId,
+                        desc: item.desc.trim(),
+                        nominal: item.nominal,
+                        timestamp: new Date().getTime()
+                    };
+
+                    this.expenses = [...this.expenses, newExpense];
+                    this.saveData();
+                    
+                    this.expenseForm[catId].checked = false;
+                    this.expenseForm[catId].nominalDisplay = '';
+                    this.expenseForm[catId].nominal = 0;
+                    this.expenseForm[catId].desc = '';
+
+                    this.updateDashboard();
+                    
+                    this.showToast(`Pengeluaran ${this.getCategoryName(catId)} dicatat`);
+                },
+
+                getSavedExpense(dateStr, catId) {
+                    return this.expenses
+                        .filter(e => e.date === dateStr && e.category === catId)
+                        .reduce((sum, item) => sum + item.nominal, 0);
+                },
+
+                calculateDailyExpense(dateStr) {
+                    if(!dateStr) return 0;
+                    return this.expenses
+                        .filter(e => e.date === dateStr)
+                        .reduce((sum, item) => sum + item.nominal, 0);
+                },
+
+                resetExpenseForm() {
+                    for (const key in this.expenseForm) {
+                        this.expenseForm[key].checked = false;
+                        this.expenseForm[key].nominalDisplay = '';
+                        this.expenseForm[key].nominal = 0;
+                        this.expenseForm[key].desc = '';
+                    }
+                },
+
+                // --- Global & Menu 3 Logic ---
+                calculateTotalActiveBalance() {
+                    let totalBudget = this.budgets.reduce((sum, b) => {
+                        return b.tipe === 'add' ? sum + b.nominal : sum - b.nominal;
+                    }, 0);
+                    let totalExpense = this.expenses.reduce((sum, e) => sum + e.nominal, 0);
+                    return totalBudget - totalExpense;
+                },
+
+                generateReport() {
+                    const start = new Date(this.reportParams.startDate);
+                    start.setHours(0,0,0,0);
+                    const end = new Date(this.reportParams.endDate);
+                    end.setHours(23,59,59,999);
+
+                    if (start > end) {
+                        this.showToast('Tanggal awal tidak boleh lebih besar', 'error');
+                        return;
+                    }
+
+                    let periodBudgets = this.budgets.filter(b => {
+                        const bDate = new Date(b.tahun, b.bulan - 1, b.tanggal);
+                        return bDate >= start && bDate <= end;
+                    }).sort((a,b) => new Date(b.tahun, b.bulan-1, b.tanggal) - new Date(a.tahun, a.bulan-1, a.tanggal));
+
+                    let periodExpenses = this.expenses.filter(e => {
+                        const eDate = new Date(e.date);
+                        return eDate >= start && eDate <= end;
+                    }).sort((a,b) => new Date(b.date) - new Date(a.date));
+
+                    let totalBudgetAdd = periodBudgets.filter(b=>b.tipe === 'add').reduce((s, b) => s + b.nominal, 0);
+                    let totalBudgetReduce = periodBudgets.filter(b=>b.tipe === 'reduce').reduce((s, b) => s + b.nominal, 0);
+                    let netBudget = totalBudgetAdd - totalBudgetReduce;
+                    
+                    let totalExpense = periodExpenses.reduce((s, e) => s + e.nominal, 0);
+
+                    this.reportDetails = { 
+                        totalBudget: netBudget, 
+                        totalExpense: totalExpense,
+                        budgetList: periodBudgets,
+                        expenseList: periodExpenses
+                    };
+
+                    if (this.reportParams.jenis === 'budget') {
+                        this.reportResult = netBudget;
+                    } else if (this.reportParams.jenis === 'expense') {
+                        this.reportResult = totalExpense;
+                    } else {
+                        this.reportResult = netBudget - totalExpense;
+                    }
+                },
+
+                getReportTitle() {
+                    switch(this.reportParams.jenis) {
+                        case 'budget': return 'Total Budget (Net)';
+                        case 'expense': return 'Total Pengeluaran';
+                        case 'sum': return 'Sisa Saldo Periode';
+                        default: return 'Report';
+                    }
+                },
+
+                // --- Edit & Delete Logic ---
+                formatEditBudgetInput() {
+                    this.editBudgetForm.nominalDisplay = this.formatNumberInput(this.editBudgetForm.nominalDisplay);
+                    this.editBudgetForm.nominal = this.parseRupiahToNumber(this.editBudgetForm.nominalDisplay);
+                },
+
+                formatEditExpenseInput() {
+                    this.editExpenseForm.nominalDisplay = this.formatNumberInput(this.editExpenseForm.nominalDisplay);
+                    this.editExpenseForm.nominal = this.parseRupiahToNumber(this.editExpenseForm.nominalDisplay);
+                },
+
+                openEditBudget(item) {
+                    this.editBudgetForm.id = item.id;
+                    this.editBudgetForm.tahun = item.tahun;
+                    this.editBudgetForm.bulan = item.bulan;
+                    this.editBudgetForm.tanggal = item.tanggal;
+                    this.editBudgetForm.tipe = item.tipe;
+                    this.editBudgetForm.nominal = item.nominal;
+                    this.editBudgetForm.nominalDisplay = this.formatRupiah(item.nominal);
+                    this.editBudgetForm.keterangan = item.keterangan;
+                    this.editBudgetForm.show = true;
+                },
+
+                saveEditBudget() {
+                    if (this.editBudgetForm.nominal <= 0 || !this.editBudgetForm.keterangan.trim()) {
+                        this.showToast('Nominal dan Keterangan tidak boleh kosong', 'error');
+                        return;
+                    }
+                    const index = this.budgets.findIndex(b => b.id === this.editBudgetForm.id);
+                    if(index !== -1) {
+                        this.budgets[index] = {
+                            ...this.budgets[index],
+                            tanggal: parseInt(this.editBudgetForm.tanggal),
+                            tipe: this.editBudgetForm.tipe,
+                            nominal: this.editBudgetForm.nominal,
+                            keterangan: this.editBudgetForm.keterangan.trim()
+                        };
+                        this.editBudgetForm.show = false;
+                        this.saveData();
+                        this.generateReport();
+                        this.updateDashboard();
+                        this.showToast('Data budget berhasil diperbarui');
+                    }
+                },
+
+                openEditExpense(item) {
+                    this.editExpenseForm.id = item.id;
+                    this.editExpenseForm.date = item.date;
+                    this.editExpenseForm.category = item.category;
+                    this.editExpenseForm.desc = item.desc;
+                    this.editExpenseForm.nominal = item.nominal;
+                    this.editExpenseForm.nominalDisplay = this.formatRupiah(item.nominal);
+                    this.editExpenseForm.show = true;
+                },
+
+                saveEditExpense() {
+                    if (this.editExpenseForm.nominal <= 0 || !this.editExpenseForm.desc.trim()) {
+                        this.showToast('Nominal dan Keterangan tidak boleh kosong', 'error');
+                        return;
+                    }
+                    const index = this.expenses.findIndex(e => e.id === this.editExpenseForm.id);
+                    if(index !== -1) {
+                        this.expenses[index] = {
+                            ...this.expenses[index],
+                            date: this.editExpenseForm.date,
+                            category: this.editExpenseForm.category,
+                            desc: this.editExpenseForm.desc.trim(),
+                            nominal: this.editExpenseForm.nominal
+                        };
+                        this.editExpenseForm.show = false;
+                        this.saveData();
+                        this.generateReport();
+                        this.updateDashboard();
+                        this.showToast('Data pengeluaran berhasil diperbarui');
+                    }
+                },
+
+                confirmDeleteBudget(id) {
+                    this.confirmModal.actionType = 'deleteBudget';
+                    this.confirmModal.targetId = id;
+                    this.confirmModal.message = "Apakah Anda yakin ingin menghapus data budget ini?";
+                    this.confirmModal.show = true;
+                },
+
+                confirmDeleteExpense(id) {
+                    this.confirmModal.actionType = 'deleteExpense';
+                    this.confirmModal.targetId = id;
+                    this.confirmModal.message = "Apakah Anda yakin ingin menghapus data pengeluaran ini?";
+                    this.confirmModal.show = true;
+                },
+
+                // --- Reset Modals ---
+                confirmReset() {
+                    let msg = "";
+                    if (this.currentMenu === 'inputBudget') {
+                        msg = "Apakah Anda yakin ingin menghapus SELURUH data Budget? Aksi ini tidak dapat dibatalkan.";
+                        this.confirmModal.actionType = 'budget';
+                    } else if (this.currentMenu === 'inputPengeluaran') {
+                        msg = "Apakah Anda yakin ingin menghapus SELURUH data Pengeluaran? Aksi ini tidak dapat dibatalkan.";
+                        this.confirmModal.actionType = 'expense';
+                    } else if (this.currentMenu === 'report') {
+                        msg = "Apakah Anda yakin ingin mereset filter laporan ini?";
+                        this.confirmModal.actionType = 'report';
+                    }
+                    
+                    this.confirmModal.message = msg;
+                    this.confirmModal.show = true;
+                },
+
+                executeReset() {
+                    const action = this.confirmModal.actionType;
+                    const targetId = this.confirmModal.targetId;
+                    
+                    this.confirmModal.show = false; 
+                    
+                    setTimeout(() => {
+                        if (action === 'budget') {
+                            this.budgets = [];
+                            this.saveData();
+                            this.updateDashboard();
+                            this.showToast('Seluruh data budget telah dihapus');
+                        } else if (action === 'expense') {
+                            this.expenses = [];
+                            this.saveData();
+                            this.updateDashboard();
+                            this.showToast('Seluruh data pengeluaran telah dihapus');
+                            this.resetExpenseForm();
+                            this.activeExpenseDate = null;
+                        } else if (action === 'report') {
+                            this.reportResult = null;
+                            this.showToast('Filter laporan direset');
+                        } else if (action === 'deleteBudget') {
+                            this.budgets = this.budgets.filter(b => b.id !== targetId);
+                            this.saveData();
+                            this.generateReport();
+                            this.updateDashboard();
+                            this.showToast('Data budget berhasil dihapus');
+                        } else if (action === 'deleteExpense') {
+                            this.expenses = this.expenses.filter(e => e.id !== targetId);
+                            this.saveData();
+                            this.generateReport();
+                            this.updateDashboard();
+                            this.showToast('Data pengeluaran berhasil dihapus');
+                        }
+                    }, 50);
+                }
+            }));
+        });
+    </script>
+</body>
+</html>
+```
