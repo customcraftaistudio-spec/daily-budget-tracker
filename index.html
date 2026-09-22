@@ -60,9 +60,23 @@
                         </div>
                     </div>
 
-                    <!-- Chart Container -->
-                    <div class="relative h-48 w-full mb-4">
-                        <canvas id="budgetChart"></canvas>
+                    <!-- Dual Chart Container -->
+                    <div class="space-y-4 mb-5">
+                        <!-- Chart 1: Pendapatan vs Pengeluaran -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                            <h3 class="text-[11px] font-bold text-slate-600 text-center mb-2 uppercase tracking-wider">Pendapatan vs Pengeluaran</h3>
+                            <div class="relative h-40 w-full">
+                                <canvas id="budgetChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Komposisi Pengeluaran -->
+                        <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                            <h3 class="text-[11px] font-bold text-slate-600 text-center mb-2 uppercase tracking-wider">Kategori Pengeluaran</h3>
+                            <div class="relative h-40 w-full">
+                                <canvas id="expenseChart"></canvas>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Summary Stats -->
@@ -530,6 +544,7 @@
     <script>
         // 1. Pindahkan Chart ke luar Alpine untuk menghindari Error Proxy (Silent Crash)
         let dashboardChart = null; 
+        let expenseChart = null;
 
         document.addEventListener('alpine:init', () => {
             // Helper untuk mengamankan Zona Waktu Lokal (WIB) agar tidak mundur ke hari kemarin
@@ -708,10 +723,12 @@
                     });
                     let totalBudget = periodBudgets.reduce((sum, b) => b.tipe === 'add' ? sum + b.nominal : sum - b.nominal, 0);
 
-                    let totalExpense = this.expenses.filter(e => {
+                    let periodExpenses = this.expenses.filter(e => {
                         const eDate = new Date(e.date);
                         return eDate >= start && eDate <= end;
-                    }).reduce((sum, e) => sum + e.nominal, 0);
+                    });
+                    
+                    let totalExpense = periodExpenses.reduce((sum, e) => sum + e.nominal, 0);
 
                     let sisa = totalBudget - totalExpense;
                     
@@ -721,10 +738,19 @@
                         sisa: sisa
                     };
 
-                    this.renderChart(totalBudget, totalExpense, sisa);
+                    // Hitung rincian per kategori pengeluaran
+                    let catTotals = { makan: 0, rokok: 0, bensin: 0, lainnya: 0 };
+                    periodExpenses.forEach(e => {
+                        if (catTotals[e.category] !== undefined) {
+                            catTotals[e.category] += e.nominal;
+                        }
+                    });
+
+                    this.renderBudgetChart(totalBudget, totalExpense, sisa);
+                    this.renderExpenseChart(catTotals, totalExpense);
                 },
 
-                renderChart(budget, expense, sisa) {
+                renderBudgetChart(budget, expense, sisa) {
                     const ctx = document.getElementById('budgetChart');
                     if (!ctx) return;
 
@@ -757,20 +783,80 @@
                             options: {
                                 responsive: true,
                                 maintainAspectRatio: false,
-                                cutout: '65%',
+                                cutout: '60%',
                                 plugins: {
                                     legend: { 
-                                        position: 'bottom',
-                                        labels: { boxWidth: 12, font: { size: 11, family: 'Inter' } }
+                                        position: 'right',
+                                        labels: { boxWidth: 10, font: { size: 10, family: 'Inter' } }
                                     },
                                     tooltip: {
                                         callbacks: {
                                             label: (context) => {
                                                 if (budget === 0 && expense === 0) return 'Data Kosong';
-                                                let label = context.label || '';
-                                                if (label) { label += ': '; }
-                                                label += this.formatRupiah(context.raw);
-                                                return label;
+                                                let value = context.raw;
+                                                let percentage = '';
+                                                if (budget > 0) {
+                                                    percentage = Math.round((value / budget) * 100) + '%';
+                                                } else {
+                                                    percentage = context.dataIndex === 0 ? '100%' : '0%';
+                                                }
+                                                return ` ${context.label}: Rp ${this.formatRupiah(value)} (${percentage})`;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                },
+
+                renderExpenseChart(catTotals, totalExpense) {
+                    const ctx = document.getElementById('expenseChart');
+                    if (!ctx) return;
+
+                    let data = [catTotals.makan, catTotals.rokok, catTotals.bensin, catTotals.lainnya];
+                    let bgColors = ['#3b82f6', '#f59e0b', '#8b5cf6', '#64748b']; 
+                    let labels = ['Makan', 'Rokok', 'Bensin', 'Lainnya'];
+
+                    if (totalExpense === 0) {
+                        data = [1];
+                        bgColors = ['#e2e8f0'];
+                        labels = ['Belum ada pengeluaran'];
+                    }
+
+                    if (expenseChart) {
+                        expenseChart.data.datasets[0].data = data;
+                        expenseChart.data.datasets[0].backgroundColor = bgColors;
+                        expenseChart.data.labels = labels;
+                        expenseChart.update();
+                    } else {
+                        expenseChart = new Chart(ctx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    data: data,
+                                    backgroundColor: bgColors,
+                                    borderWidth: 0,
+                                    hoverOffset: 4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '60%',
+                                plugins: {
+                                    legend: { 
+                                        position: 'right',
+                                        labels: { boxWidth: 10, font: { size: 10, family: 'Inter' } }
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (context) => {
+                                                if (totalExpense === 0) return 'Belum ada pengeluaran';
+                                                let value = context.raw;
+                                                let percentage = Math.round((value / totalExpense) * 100) + '%';
+                                                return ` ${context.label}: Rp ${this.formatRupiah(value)} (${percentage})`;
                                             }
                                         }
                                     }
